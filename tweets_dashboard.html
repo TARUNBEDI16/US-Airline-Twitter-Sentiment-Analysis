@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>US Airline Twitter Sentiment Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f1117;color:#fff;font-family:'Segoe UI',sans-serif;padding:24px;min-height:100vh}
+h1{text-align:center;font-size:1.7rem;font-weight:700;margin-bottom:4px}
+.subtitle{text-align:center;color:#a0a3b1;font-size:.9rem;margin-bottom:28px}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+.kpi{background:#1a1d27;border-radius:12px;padding:20px;border-left:4px solid;text-align:center;transition:transform .2s}
+.kpi:hover{transform:translateY(-3px)}
+.kpi .label{color:#a0a3b1;font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
+.kpi .value{font-size:1.7rem;font-weight:700}
+.kpi .sub{font-size:.75rem;color:#a0a3b1;margin-top:4px}
+.section-title{font-size:.8rem;color:#a0a3b1;text-transform:uppercase;letter-spacing:.08em;margin-bottom:16px;font-weight:600}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+.grid-1{margin-bottom:16px}
+.card{background:#1a1d27;border-radius:12px;padding:22px;border:1px solid #2d2f3e}
+.card canvas{max-height:240px}
+.filter-row{display:flex;gap:10px;margin-bottom:22px;justify-content:center;flex-wrap:wrap}
+.filter-btn{padding:7px 20px;border-radius:20px;border:1.5px solid #2d2f3e;background:transparent;color:#a0a3b1;cursor:pointer;font-size:.85rem;transition:all .2s;font-family:'Segoe UI',sans-serif}
+.filter-btn.active,.filter-btn:hover{color:#fff;background:#6c5ce720}
+.table-wrap{overflow-x:auto;margin-top:8px}
+table{width:100%;border-collapse:collapse;font-size:.85rem}
+th{color:#a0a3b1;text-align:left;padding:10px 14px;border-bottom:1px solid #2d2f3e;font-weight:500;font-size:.78rem;text-transform:uppercase;letter-spacing:.04em}
+td{padding:10px 14px;border-bottom:1px solid #1f2233}
+tr:hover td{background:#1f2233}
+.badge{padding:3px 12px;border-radius:20px;font-size:.75rem;font-weight:600}
+.pos{background:#00b89422;color:#00b894}
+.neu{background:#fdcb6e22;color:#fdcb6e}
+.neg{background:#e1705522;color:#e17055}
+.bar-inline{height:6px;border-radius:3px;margin-top:4px;background:#2d2f3e;overflow:hidden}
+.bar-fill{height:100%;border-radius:3px;transition:width .8s ease}
+.footer{text-align:center;color:#555;font-size:.8rem;margin-top:28px;padding-top:20px;border-top:1px solid #2d2f3e}
+@media(max-width:900px){.grid-3,.grid-2{grid-template-columns:1fr}.kpis{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+
+<h1>✈️ US Airline Twitter Sentiment Analysis</h1>
+<p class="subtitle">NLP · Sentiment Classification · 14,640 Tweets · February 2015 · Built by Tarunjeet Singh Bedi</p>
+
+<div class="kpis" id="kpis"></div>
+
+<div class="filter-row" id="filters"></div>
+
+<div class="grid-3">
+  <div class="card"><div class="section-title">Overall Sentiment</div><canvas id="donut"></canvas></div>
+  <div class="card"><div class="section-title">Tweets per Airline</div><canvas id="airlineBar"></canvas></div>
+  <div class="card"><div class="section-title">Positive Rate by Airline %</div><canvas id="posRate"></canvas></div>
+</div>
+
+<div class="grid-2">
+  <div class="card"><div class="section-title">Sentiment Breakdown by Airline</div><canvas id="stackedBar"></canvas></div>
+  <div class="card"><div class="section-title">Top Negative Reasons</div><canvas id="negReasons"></canvas></div>
+</div>
+
+<div class="grid-2">
+  <div class="card"><div class="section-title">Tweet Volume by Hour of Day</div><canvas id="hourly"></canvas></div>
+  <div class="card"><div class="section-title">Avg Sentiment Confidence by Airline</div><canvas id="confidence"></canvas></div>
+</div>
+
+<div class="card grid-1">
+  <div class="section-title">Airline Performance Table</div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Airline</th><th>Total Tweets</th><th>Positive</th><th>Neutral</th><th>Negative</th><th>Positive Rate</th><th>Sentiment</th></tr></thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="footer">Built with Python · Pandas · Scikit-learn · NLTK · Chart.js &nbsp;|&nbsp; Tarunjeet Singh Bedi · tarunbedi16@gmail.com &nbsp;|&nbsp; <a href="https://www.linkedin.com/in/tarunjeetsingh" style="color:#6c5ce7">LinkedIn</a></div>
+
+<script>
+const D = {"total_tweets":14640,"overall_sentiment":{"negative":9178,"neutral":3099,"positive":2363},"sent_by_airline":{"Virgin America":{"positive":152,"neutral":171,"negative":181},"United":{"positive":492,"neutral":723,"negative":2607},"Southwest":{"positive":570,"neutral":755,"negative":1095},"Delta":{"positive":544,"neutral":723,"negative":955},"US Airways":{"positive":269,"neutral":438,"negative":2206},"American":{"positive":336,"neutral":289,"negative":2134}},"neg_reasons":{"Customer Service Issue":2910,"Late Flight":1665,"Can't Tell":1190,"Cancelled Flight":847,"Lost Luggage":724,"Bad Flight":580,"Flight Booking Problems":529,"Flight Attendant Complaints":481,"longlines":178,"Damaged Luggage":74},"by_hour":{"0":131,"1":95,"2":74,"3":62,"4":62,"5":107,"6":234,"7":440,"8":621,"9":769,"10":793,"11":821,"12":774,"13":720,"14":720,"15":714,"16":699,"17":675,"18":617,"19":605,"20":613,"21":624,"22":580,"23":430},"conf_avg":{"American":0.899,"Delta":0.887,"Southwest":0.868,"US Airways":0.901,"United":0.896,"Virgin America":0.868},"rt_by_sent":{"negative":0.08,"neutral":0.07,"positive":0.09},"airline_total":{"United":3822,"US Airways":2913,"American":2759,"Southwest":2420,"Delta":2222,"Virgin America":504},"pos_rate":{"Virgin America":30.2,"United":12.9,"Southwest":23.6,"Delta":24.5,"US Airways":9.2,"American":12.2},"airlines":["Virgin America","United","Southwest","Delta","US Airways","American"],"sentiments":["positive","neutral","negative"]};
+
+const COLORS = {positive:'#00b894', neutral:'#fdcb6e', negative:'#e17055'};
+const AIRLINE_COLORS = ['#6c5ce7','#00b894','#fdcb6e','#e17055','#74b9ff','#fd79a8'];
+const BG = '#1a1d27'; const TEXT = '#ffffff'; const SUB = '#a0a3b1';
+
+Chart.defaults.color = SUB;
+Chart.defaults.borderColor = '#2d2f3e';
+const baseOpts = {responsive:true, plugins:{legend:{display:false}}};
+
+// KPI Cards
+const negPct = (D.overall_sentiment.negative/D.total_tweets*100).toFixed(1);
+const posPct = (D.overall_sentiment.positive/D.total_tweets*100).toFixed(1);
+const worstAirline = Object.entries(D.pos_rate).sort((a,b)=>a[1]-b[1])[0][0];
+const bestAirline = Object.entries(D.pos_rate).sort((a,b)=>b[1]-a[1])[0][0];
+const kpis = [
+  {label:'Total Tweets Analysed', value: D.total_tweets.toLocaleString(), sub:'Feb 2015', color:'#6c5ce7'},
+  {label:'Negative Sentiment', value: negPct+'%', sub: D.overall_sentiment.negative.toLocaleString()+' tweets', color:'#e17055'},
+  {label:'Positive Sentiment', value: posPct+'%', sub: D.overall_sentiment.positive.toLocaleString()+' tweets', color:'#00b894'},
+  {label:'Most Satisfied Airline', value: bestAirline, sub: D.pos_rate[bestAirline]+'% positive rate', color:'#fdcb6e'},
+];
+document.getElementById('kpis').innerHTML = kpis.map(k=>
+  `<div class="kpi" style="border-color:${k.color}">
+    <div class="label">${k.label}</div>
+    <div class="value" style="color:${k.color}">${k.value}</div>
+    <div class="sub">${k.sub}</div>
+  </div>`).join('');
+
+// Filters
+let activeAirline = 'All';
+const filterDiv = document.getElementById('filters');
+['All',...D.airlines].forEach(a => {
+  const btn = document.createElement('button');
+  btn.className = 'filter-btn' + (a==='All'?' active':'');
+  btn.textContent = a;
+  btn.style.borderColor = a==='All'?'#6c5ce7': AIRLINE_COLORS[D.airlines.indexOf(a)] || '#2d2f3e';
+  btn.onclick = () => {
+    document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    activeAirline = a;
+    updateNegReasons(a);
+  };
+  filterDiv.appendChild(btn);
+});
+
+// 1. Donut
+new Chart(document.getElementById('donut'),{
+  type:'doughnut',
+  data:{
+    labels:['Negative','Neutral','Positive'],
+    datasets:[{
+      data:[D.overall_sentiment.negative, D.overall_sentiment.neutral, D.overall_sentiment.positive],
+      backgroundColor:['#e17055','#fdcb6e','#00b894'],
+      borderColor:'#0f1117', borderWidth:3, hoverOffset:8
+    }]
+  },
+  options:{responsive:true, cutout:'62%',
+    plugins:{legend:{display:true, position:'bottom', labels:{color:SUB, padding:14, boxWidth:12}},
+    tooltip:{callbacks:{label:ctx=>' '+ctx.raw.toLocaleString()+' tweets ('+((ctx.raw/D.total_tweets)*100).toFixed(1)+'%)'}}}}
+});
+
+// 2. Airline bar
+const airlineOrder = Object.entries(D.airline_total).sort((a,b)=>b[1]-a[1]);
+new Chart(document.getElementById('airlineBar'),{
+  type:'bar',
+  data:{
+    labels: airlineOrder.map(a=>a[0]),
+    datasets:[{data: airlineOrder.map(a=>a[1]),
+      backgroundColor: airlineOrder.map((_,i)=>AIRLINE_COLORS[i]),
+      borderRadius:6, borderSkipped:false}]
+  },
+  options:{...baseOpts, scales:{y:{grid:{color:'#2d2f3e'}}},
+    plugins:{...baseOpts.plugins, tooltip:{callbacks:{label:ctx=>' '+ctx.raw.toLocaleString()+' tweets'}}}}
+});
+
+// 3. Positive rate
+const posOrder = Object.entries(D.pos_rate).sort((a,b)=>b[1]-a[1]);
+new Chart(document.getElementById('posRate'),{
+  type:'bar',
+  data:{
+    labels: posOrder.map(a=>a[0]),
+    datasets:[{data: posOrder.map(a=>a[1]),
+      backgroundColor: posOrder.map((_,i)=>AIRLINE_COLORS[i]),
+      borderRadius:6, borderSkipped:false}]
+  },
+  options:{...baseOpts,
+    scales:{y:{grid:{color:'#2d2f3e'}, ticks:{callback:v=>v+'%'}, max:40}},
+    plugins:{...baseOpts.plugins, tooltip:{callbacks:{label:ctx=>' '+ctx.raw+'% positive'}}}}
+});
+
+// 4. Stacked bar
+new Chart(document.getElementById('stackedBar'),{
+  type:'bar',
+  data:{
+    labels: D.airlines,
+    datasets:[
+      {label:'Positive', data: D.airlines.map(a=>D.sent_by_airline[a].positive), backgroundColor:'#00b894', borderRadius:0, stack:'s'},
+      {label:'Neutral',  data: D.airlines.map(a=>D.sent_by_airline[a].neutral),  backgroundColor:'#fdcb6e', stack:'s'},
+      {label:'Negative', data: D.airlines.map(a=>D.sent_by_airline[a].negative), backgroundColor:'#e17055', stack:'s'},
+    ]
+  },
+  options:{responsive:true, scales:{x:{stacked:true, grid:{display:false}}, y:{stacked:true, grid:{color:'#2d2f3e'}}},
+    plugins:{legend:{display:true, position:'bottom', labels:{color:SUB, padding:12, boxWidth:12}},
+    tooltip:{mode:'index', intersect:false}}}
+});
+
+// 5. Negative reasons (filterable)
+let negChart;
+function updateNegReasons(airline) {
+  let reasons;
+  if(airline==='All') {
+    reasons = Object.entries(D.neg_reasons).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  } else {
+    const d = D.neg_by_airline[airline] || {};
+    reasons = Object.entries(d).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  }
+  const labels = reasons.map(r=>r[0].length>22?r[0].slice(0,22)+'…':r[0]);
+  const values = reasons.map(r=>r[1]);
+  if(negChart) negChart.destroy();
+  negChart = new Chart(document.getElementById('negReasons'),{
+    type:'bar',
+    data:{
+      labels, datasets:[{data:values, backgroundColor:'#e17055aa',
+        borderColor:'#e17055', borderWidth:1.5,
+        borderRadius:4, borderSkipped:false, indexAxis:'y'}]
+    },
+    options:{...baseOpts, indexAxis:'y',
+      scales:{x:{grid:{color:'#2d2f3e'}}},
+      plugins:{...baseOpts.plugins, tooltip:{callbacks:{label:ctx=>' '+ctx.raw.toLocaleString()+' complaints'}}}}
+  });
+}
+updateNegReasons('All');
+
+// 6. Hourly
+const hours = Array.from({length:24},(_,i)=>i);
+new Chart(document.getElementById('hourly'),{
+  type:'line',
+  data:{
+    labels: hours.map(h=>h+':00'),
+    datasets:[{data: hours.map(h=>D.by_hour[h]||0),
+      borderColor:'#6c5ce7', backgroundColor:'rgba(108,92,231,0.12)',
+      fill:true, tension:0.4, pointRadius:3, pointHoverRadius:6,
+      pointBackgroundColor:'#6c5ce7'}]
+  },
+  options:{...baseOpts,
+    scales:{y:{grid:{color:'#2d2f3e'}}, x:{grid:{display:false}, ticks:{maxRotation:45, minRotation:45, font:{size:10}}}},
+    plugins:{...baseOpts.plugins, tooltip:{callbacks:{label:ctx=>' '+ctx.raw+' tweets'}}}}
+});
+
+// 7. Confidence
+const confOrder = Object.entries(D.conf_avg).sort((a,b)=>b[1]-a[1]);
+new Chart(document.getElementById('confidence'),{
+  type:'bar',
+  data:{
+    labels: confOrder.map(a=>a[0]),
+    datasets:[{data: confOrder.map(a=>a[1]),
+      backgroundColor: confOrder.map((_,i)=>AIRLINE_COLORS[i]),
+      borderRadius:6, borderSkipped:false}]
+  },
+  options:{...baseOpts,
+    scales:{y:{grid:{color:'#2d2f3e'}, ticks:{callback:v=>(v*100).toFixed(0)+'%'}, min:0.8, max:0.95}},
+    plugins:{...baseOpts.plugins, tooltip:{callbacks:{label:ctx=>' '+(ctx.raw*100).toFixed(1)+'% confidence'}}}}
+});
+
+// Table
+document.getElementById('tableBody').innerHTML = D.airlines
+  .sort((a,b)=>D.airline_total[b]-D.airline_total[a])
+  .map(a => {
+    const s = D.sent_by_airline[a];
+    const total = D.airline_total[a];
+    const pr = D.pos_rate[a];
+    const sentiment = pr >= 25 ? 'pos' : pr >= 15 ? 'neu' : 'neg';
+    const sentLabel = pr >= 25 ? 'Good' : pr >= 15 ? 'Average' : 'Poor';
+    return `<tr>
+      <td><strong>${a}</strong></td>
+      <td>${total.toLocaleString()}</td>
+      <td style="color:#00b894">${s.positive.toLocaleString()}</td>
+      <td style="color:#fdcb6e">${s.neutral.toLocaleString()}</td>
+      <td style="color:#e17055">${s.negative.toLocaleString()}</td>
+      <td>
+        <strong style="color:${pr>=25?'#00b894':pr>=15?'#fdcb6e':'#e17055'}">${pr}%</strong>
+        <div class="bar-inline"><div class="bar-fill" style="width:${pr*2.5}%;background:${pr>=25?'#00b894':pr>=15?'#fdcb6e':'#e17055'}"></div></div>
+      </td>
+      <td><span class="badge ${sentiment}">${sentLabel}</span></td>
+    </tr>`;
+  }).join('');
+</script>
+</body>
+</html>
